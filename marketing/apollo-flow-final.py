@@ -8,6 +8,7 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.chrome.options import Options
 from selenium.common.exceptions import NoSuchElementException
 from .models import BackgroundTasks,Response
+from django.db import models,transaction
 import datetime
 from time import sleep
 import os
@@ -17,7 +18,7 @@ current_date = datetime.date.today()
 
 
 # ||||||||||||||||||||||||||||||------------End Imports------------||||||||||||||||||||||||||||||
-def addResultsToDB(task_id, findings, keyword, domain,cursor,industry):
+def addResultsToDB(task_id, findings, keyword, domain,industry):
     
     #use models 
     try:   
@@ -25,69 +26,46 @@ def addResultsToDB(task_id, findings, keyword, domain,cursor,industry):
             print(finding)
             print(finding["name"])
             findingString = json.dumps(finding)
-
-            insert_query = (
-                "INSERT INTO response (`background_task_id`, `keyword`, `response_object`, `domain_name`, `name`, `designation`, `email`,`industry`) "
-                "VALUES (%s, %s, %s, %s, %s, %s, %s,%s)"
+            response = Response(
+                                background_task_id=task_id,
+                                keyword = keyword,
+                                email = finding['email'],
+                                response_object = findingString,
+                                domain_name = domain,
+                                name = finding['name'],
+                                industry = industry,
+                                designation = finding['designation']
             )
-            insert_values = (
-                task_id,
-                keyword,
-                findingString,
-                domain,
-                finding['name'],
-                finding['designation'],
-                finding['email'],
-                industry,
-            )
-            print("BELOW ARE THE INSERT VALUES")
-            print(insert_values)
-
-            cursor.execute(insert_query, insert_values)
-        conn.commit()
+            response.save()
         print("Findings added successfully")
     except Exception as e:
         print("An error occurred while adding findings to DB")
         print(f"Error: {e}")
-        conn.rollback()
-    cursor.close()
+    
 
 
-def update_status(task_id, status, cursor):
+def update_task_status(task_id, status):
     try:
-        update_query = (
-            f"UPDATE background_tasks SET state = '{status}' WHERE id = {task_id}"
-        )
-        cursor.execute(update_query)
-        print(f"Status updated successfully to {status}")
-        conn.commit()
-
+        with transaction.atomic():
+            task = BackgroundTasks.objects.get(id=task_id)
+            task.update_status(status)
+            print(f"Status updated successfully to {status}")
+    except BackgroundTasks.DoesNotExist:
+        print(f"Task with id {task_id} does not exist")
     except Exception as e:
-        print("We are failing here in update status")
-        print(f"Error: {e}")
-        conn.rollback()
+        print("Error updating task status:", e)
 
 
 
-def printLogs(log):
-    now = datetime.date.today()
-    filename = "logs.txt"
-    content_to_append = f"{now.strftime('%d-%m-%Y||%H:%M:%S')}------{log}\n"
 
-    with open(filename, "a+") as file:
-        file.seek(0, 2)
-        if file.tell() == 0:
-            file.write("\n")
-        file.write(content_to_append)
-
-def check_top_tasks_not_processing(cursor):
-    cursor = conn.cursor(dictionary=True)
-    cursor.execute(
-            "SELECT * FROM background_tasks WHERE state='processing' ORDER BY id LIMIT 5"
-        )
-    processing_results = cursor.fetchall()
-    cursor.closeIO
-    return len(processing_results) == 0
+def check_top_tasks_not_processing():
+    try:
+        # Query for top 5 tasks in 'processing' state
+        processing_results = BackgroundTasks.objects.filter(state='processing').order_by('id')[:5]
+        return len(processing_results) == 0
+    except Exception as e:
+        print("Error checking top tasks:", e)
+        return False
 # ||||||||||||||||||||||||||||||------------Argument Handling Start------------||||||||||||||||||||||||||||||
 # args = len(sys.argv) - 1
 # if(args < 2):
@@ -116,63 +94,43 @@ found = {}
 #         break
 
 ###NEED TO SETUP A LOOP FOR WHEN WE HAVE A BATCH ID(BUT THIS WILL RESULT IN 1 BY 1) AND WHEN WE HAVE SINGLE THAT LOOP WILL ONLY RUN ONCE
+
 def custom_condition():
     try:
-        cursor = conn.cursor(dictionary=True)
-        cursor.execute("SELECT * FROM background_tasks WHERE state ='processing' AND date=%s LIMIT 3",(current_date,))
-        results = cursor.fetchall()
-        #print(len(results))
+       
 
-        #print(results)
+        # Query for tasks in 'processing' state for the current date, limited to 3
+        results = BackgroundTasks.objects.filter(state='processing', date=current_date)[:3]
+
     except Exception as e:
-        print(e)
-    if len(results) <= 2:
-        return True
-    else: 
+        print("Error in custom_condition:", e)
         return False
+
+    return len(results) <= 2
 
 if custom_condition():
     print("EXECUTION POSSIBLE")
-    cursor = conn.cursor(dictionary=True)
-    cursor.execute(
-        "SELECT * FROM background_tasks WHERE state='pending' ORDER BY id LIMIT 1"
-    )
-    result = cursor.fetchone()
-    if result is not None:
-        print(result)
-        task_id = result['id']
-        domain = result['domain_name']
-        keyword = result['keyword']
-        update_status(task_id, "processing",cursor)
+
+    # Query for the next pending task
+    pending_task = BackgroundTasks.objects.filter(state='pending').order_by('id').first()
+
+    if pending_task:
+        print(pending_task)
+        task_id = pending_task.id
+        domain = pending_task.domain_name
+        keyword = pending_task.keyword
+
+        # Update the status of the task to 'processing'
+        pending_task.state = 'processing'
+        pending_task.save()
 
         print(task_id, domain, keyword)
     else:
         exit()
 
 else:
-    print("Queue full") 
+    print("Queue full")
     exit()
-
-# # Find the first entry with status 'pending'
-# cursor.execute(
-#     "SELECT * FROM background_tasks WHERE state='pending' ORDER BY id LIMIT 1"
-# )
-# result = cursor.fetchone()
-# if result is not None:
-#     print(result)
-#     #     # If there is a record with status 'pending', update its status to 'processing'
-#     task_id = result['id']
-#     domain = result['domain_name']
-#     keyword = result['keyword']
-#     update_status(task_id, "processing",cursor)
-
-#     print(task_id, domain, keyword)
-# else:
-#     exit()
-
-
-
-# cursor.execute("SELECT * FROM background_tasks WHERE state='pending' ")
 
 
 
@@ -388,11 +346,7 @@ for cookie in cookies:
     driver.add_cookie(cookie)
 
 try:
-    printLogs(
-        f"----------------------------------Start----------------------------------"
-    )
     print(f"Hitting {base_url}...")
-    printLogs(f"Hitting {base_url}...")
     driver.get(base_url)
     # ||||||||||||||||||||||||||||||------------End of Authentication Bypass------------||||||||||||||||||||||||||||||
 
@@ -416,7 +370,6 @@ try:
     )
     if len(search_results) > 1:
         print("Decision b/w people and companies")
-        printLogs("Decision b/w people and companies")
         search_result_section_id = 2
     # ||||||||||||||||||||||||||||||------------End of Check if Search is giving up companies only------------||||||||||||||||||||||||||||||
 
@@ -461,8 +414,6 @@ try:
         company_index = company_index + 1
     # /html/body/div[7]/div/div/div/div/div/div/div/div[{search_result_section_id}]/div[{company_index}]/div[3]
     print(f"Searching for {domain}...")
-    printLogs(f"Searching for {domain}...")
-
     time.sleep(3)
     # ||||||||||||||||||||||||||||||------------End of Domain lookup------------||||||||||||||||||||||||||||||
 
@@ -519,12 +470,10 @@ try:
             length = length_str.split(" of ")[1]
         except NoSuchElementException as ex:
             print("No Employee Found For this Cold Company")
-            printLogs("No Employee Found For this Cold Company")
             result = subprocess.run(
                 f"curl {hostname}/empty", shell=True, capture_output=True, text=True
             )
             print(f"Command output: {result.stdout}")
-            printLogs(f"Command output: {result.stdout}")
             exit()
 
     else:
@@ -545,14 +494,12 @@ try:
 
         except NoSuchElementException as ex:
             print("No Employee Found for this New Company")
-            printLogs("No Employee Found for this New Company")
-            update_status(queue_id, "failed",cursor)
+            update_task_status(queue_id, "failed")
             result = subprocess.run(
                 f"curl {hostname}/empty", shell=True, capture_output=True, text=True
             )
 
             print(f"Command output: {result.stdout}")
-            printLogs(f"Command output: {result.stdout}")
             exit()
 
     no_of_pages = math.ceil(int(length.replace(",", "")) / 25)
@@ -561,7 +508,6 @@ try:
 
     for page_no in range(0, no_of_pages):
         print(f"Working on page number: {page_no}")
-        printLogs(f"Working on page number: {page_no}")
 
         if page_no != 0:
             if cold_comapany:
@@ -583,7 +529,6 @@ try:
             driver.switch_to.active_element.send_keys(Keys.ESCAPE)
 
             print("Changing page...")
-            printLogs("Changing page...")
         
 
         time.sleep(3)
@@ -630,7 +575,6 @@ try:
 
             if found_words:
                 print(f"Findings: {tbody}")
-                printLogs(f"Findings: {tbody}")
 
                 if cold_comapany:
                     if (
@@ -686,7 +630,6 @@ try:
                             found = {}
                         except NoSuchElementException as e:
                             print("Email element does not exist")
-                            printLogs("Email element does not exist")
                 else:
                     try:
                         print("NOT A COLD COMPANY")
@@ -742,7 +685,6 @@ try:
                                 found = {}
                             except NoSuchElementException as e:
                                 print("Email element does not exist")
-                                printLogs("Email element does not exist")
                     except:
                         if (
                             driver.find_element(
@@ -797,7 +739,6 @@ try:
                                 found = {}
                             except NoSuchElementException as e:
                                 print("Email element does not exist")
-                                printLogs("Email element does not exist")
 
     # ||||||||||||||||||||||||||||||------------End of Decision Maker lookup------------||||||||||||||||||||||||||||||
 
@@ -819,28 +760,19 @@ try:
         f"curl {hostname}/resource", shell=True, capture_output=True, text=True
     )
     print(f"findings right before updating status and adding to DB {findings}")
-    #update_status(queue_id, "test 2",cursor)
     try:
-        addResultsToDB(queue_id, findings, keyword, sitename,cursor,industry)
-        update_status(queue_id, "completed",cursor)
+        addResultsToDB(queue_id, findings, keyword, sitename,industry)
+        update_task_status(queue_id, "completed")
 
     except Exception as e:
-        update_status(queue_id,"DB ERROR",cursor)
+        update_task_status(queue_id,"DB ERROR")
     
 
     print(f"Command output: {result.stdout}")
-    printLogs(f"Command output: {result.stdout}")
-    print("Done!!")
-    printLogs("Done!!")
-    conn.commit()
-    
-    cursor.close()
+ 
     print(
         f"""This is the length of findings array in try
           {len(findings)}"""
-    )
-    printLogs(
-        f"----------------------------------End----------------------------------"
     )
     # ||||||||||||||||||||||||||||||------------JSON storage end------------||||||||||||||||||||||||||||||
 
@@ -857,20 +789,13 @@ except Exception as e:
     )
     # |||||||||||||||||| LOGIC FOR PARTIALLY RECIEVED RESULTS STARTS |||||||||||||||||||||
     if len(findings) >= 1:
-        addResultsToDB(queue_id, findings, keyword, sitename,cursor,industry)
-        update_status(queue_id, "partial",cursor)
+        addResultsToDB(queue_id, findings, keyword, sitename,industry)
+        update_task_status(queue_id, "partial")
     else:
-        update_status(queue_id, "failed",cursor)
+        update_task_status(queue_id, "failed")
     # |||||||||||||||||| LOGIC FOR PARTIALLY RECIEVED RESULTS ENDS   |||||||||||||||||||||
     
-    printLogs(
-        f"Error on line {format(sys.exc_info()[-1].tb_lineno)} {type(e).__name__}"
-    )
     result = subprocess.run(
         f"curl {hostname}/errored", shell=True, capture_output=True, text=True
     )
-    conn.commit()
-
-    cursor.close()
     print(f"Command output: {result.stdout}")
-    printLogs(f"Command output: {result.stdout}")

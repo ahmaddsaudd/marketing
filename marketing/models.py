@@ -12,6 +12,9 @@ class BackgroundTasks(models.Model):
     keyword = models.CharField(max_length=255, null=True)
     state = models.CharField(max_length=50, null=True)
     date = models.DateField(null=True)
+    def update_status(self, status):
+        self.state = status
+        self.save()
 
 class Tags(models.Model):
     name = models.CharField(max_length=255, null=True, unique=True)

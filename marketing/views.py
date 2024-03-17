@@ -1,13 +1,27 @@
 from django.shortcuts import render
 from django.http import JsonResponse
+from django.apps import apps
 from django.shortcuts import redirect
 from django.views.decorators.csrf import csrf_exempt
 from django.db.models import Q
 from .models import BackgroundTasks,Response
 import datetime , random
+import subprocess
 
 # Create your views here.
 current_date = datetime.date.today()
+
+
+def check_database():
+    try:
+        #print(custom_condition())
+        # if custom_condition():    
+            with apps.app_context():
+                subprocess.Popen(["python3", "apollo-flow-final.py"])
+    except Exception as e:
+        print(e)
+
+
 
 def home(request):
     return render(request, "home.html")
