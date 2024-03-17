@@ -76,25 +76,6 @@ def check_top_tasks_not_processing():
 tbody = []
 found = {}
 
-
-
-# while True:
-#     if check_top_tasks_not_processing(cursor):
-#         cursor.execute("SELECT * FROM background_tasks WHERE state='pending' ORDER BY id LIMIT 1")
-#         result = cursor.fetchone()
-#         if result is not None:
-#             task_id = result[0]
-#             domain = result[1]
-#             keyword = result[2]
-#             update_status(task_id,'processing')
-#             print(task_id,domain,keyword)
-#         else: 
-#             exit()
-#     else:
-#         break
-
-###NEED TO SETUP A LOOP FOR WHEN WE HAVE A BATCH ID(BUT THIS WILL RESULT IN 1 BY 1) AND WHEN WE HAVE SINGLE THAT LOOP WILL ONLY RUN ONCE
-
 def custom_condition():
     try:
        
