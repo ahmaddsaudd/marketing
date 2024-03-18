@@ -7,8 +7,9 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.chrome.options import Options
 from selenium.common.exceptions import NoSuchElementException
-from .models import BackgroundTasks,Response
-from django.db import models,transaction
+from django.db import transaction
+from models import Response,BackgroundTasks
+
 import datetime
 from time import sleep
 import os

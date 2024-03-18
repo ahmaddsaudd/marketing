@@ -18,7 +18,7 @@ class BackgroundTasks(models.Model):
 
 class Tags(models.Model):
     name = models.CharField(max_length=255, null=True, unique=True)
-    created_at = models.DateTimeField(auto_now_add=True,null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
     status = models.CharField(max_length=50, null=True)
 
 class Response(models.Model):

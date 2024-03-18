@@ -4,9 +4,13 @@ from django.apps import apps
 from django.shortcuts import redirect
 from django.views.decorators.csrf import csrf_exempt
 from django.db.models import Q
-from .models import BackgroundTasks,Response
+from marketing.models import BackgroundTasks,Response
+from apscheduler.schedulers.background import BackgroundScheduler
 import datetime , random
 import subprocess
+
+
+scheduler = BackgroundScheduler(timezone = "UTC")
 
 # Create your views here.
 current_date = datetime.date.today()
@@ -14,14 +18,14 @@ current_date = datetime.date.today()
 
 def check_database():
     try:
-        #print(custom_condition())
-        # if custom_condition():    
-            with apps.app_context():
-                subprocess.Popen(["python3", "apollo-flow-final.py"])
+        print("Printing in check_database")
+        # with apps.app_context():
+        subprocess.Popen(["python3", "marketing/apollo-flow-final.py"])
     except Exception as e:
         print(e)
 
-
+scheduler.add_job(func=check_database, trigger="interval",seconds=5)
+scheduler.start()
 
 def home(request):
     return render(request, "home.html")
@@ -35,7 +39,7 @@ def process_form(request):
 
         existing_record = get_response_record(domain_input, keyword)
         if len(existing_record) > 1:  
-            print(existing_record)
+            #print(existing_record)
             task_id = existing_record["background_task_id"]
             return redirect("downloadData", task_id=task_id)
             #  return render_template('show-results.html',msg='exists',data=existing_record)
@@ -43,7 +47,7 @@ def process_form(request):
             # also need to assign a batch
             domains_list = domain_input.replace(',',' ').split()
             domains_list = [domain.split("//")[-1] for domain in domains_list]
-            #print(len(domains_list))
+            print(len(domains_list))
             
             #below is for a multiple domain 
             if len(domains_list) > 1:
@@ -76,7 +80,7 @@ def process_form(request):
 def get_response_record(domain,keyword):
     try:
         responses = Response.objects.filter(Q(keyword='') & Q(domain_name=''))
-        print(responses)
+        #print(responses)
     except Exception as e:
         return e
     return responses
